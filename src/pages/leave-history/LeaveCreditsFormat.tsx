@@ -11,6 +11,7 @@ import { useQuery } from "@tanstack/react-query";
 import personelService from "../../services/personelService";
 import dayjs from "dayjs";
 import { useAuth } from "../../context/UserContext";
+import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
 
 type LeaveCreditsFormatType = {
   selectedPersonnel?: Personnel | null;
@@ -26,6 +27,7 @@ export default function LeaveCreditsFormat({
     new Date().getFullYear(),
   );
 
+  const { isMobile } = useResponsiveLayout(1025);
   const { setUser, user } = useAuth();
 
   const { data: personnelCredits } = useQuery({
@@ -105,7 +107,7 @@ export default function LeaveCreditsFormat({
         <div className="col-span-12 lg:col-span-3 flex flex-col items-center p-4 bg-gray-50 rounded-2xl border border-gray-100">
           <Avatar
             shape="square"
-            size={300}
+            size={isMobile ? 200 : 300}
             src={
               preview
                 ? preview

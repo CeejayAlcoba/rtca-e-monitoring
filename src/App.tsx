@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import "./App.css";
 import MainRoute from "./route/MainRoute";
-import { ConfigProvider, Grid } from "antd"; // Added Grid
+import { ConfigProvider } from "antd"; // Added Grid
 import type { Usertbl } from "./@types/Usertbl";
 import { useState } from "react";
 import { UserContext } from "./context/UserContext";

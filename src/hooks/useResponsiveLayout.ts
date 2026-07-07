@@ -11,7 +11,7 @@ export function useResponsiveLayout(mobileBreakpoint = 768) {
     const handleResize = () => {
       // Check both via window width and Antd's screen breakpoint as a fallback
       const currentIsMobile =
-        window.innerWidth < mobileBreakpoint || !!screens.sm;
+        window.innerWidth < mobileBreakpoint || !!screens.xs;
       setIsMobile(currentIsMobile);
     };
 
