@@ -114,6 +114,7 @@ export default function ManualActivitySaveModal({
   return (
     <PersonnelActivitySaveModal
       form={form}
+      showPersonnelSelection={true}
       setIsModalVisible={setIsModalVisible}
       selectedActivity={selectedActivity}
       isModalVisible={isModalVisible}

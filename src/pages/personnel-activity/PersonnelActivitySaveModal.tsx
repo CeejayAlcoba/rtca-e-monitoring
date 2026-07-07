@@ -2,6 +2,7 @@ import React, { useEffect, useMemo, useState } from "react";
 import {
   Form,
   Input,
+  InputNumber, // <-- Added AntD InputNumber
   Modal,
   Select,
   Typography,
@@ -12,7 +13,6 @@ import {
 } from "antd";
 import dayService from "../../services/dayService";
 import DateRangeComponent from "../../componets/DateRangeComponent";
-// import PersonnelSelectComponent from "../../componets/PersonnelSelectComponent";
 import personnelActivityService from "../../services/personnelActivityService";
 import dayjs from "dayjs";
 import type { PersonnelActivity } from "../../@types/PersonnelActivity";
@@ -38,7 +38,9 @@ type SaveModalProps = {
   onAfterSave?: () => void;
   modalProps?: ModalProps;
   activityTypes?: ActivityType[];
+  showPersonnelSelection?: boolean;
 };
+
 const STATUS_DESCRIPTIONS: Record<string, string> = {
   "Pending Approval": "is currently pending approval for another request",
   Scheduled: "is already scheduled for an assignment",
@@ -57,6 +59,7 @@ export default function PersonnelActivitySaveModal({
   onAfterSave,
   modalProps,
   activityTypes,
+  showPersonnelSelection = false
 }: SaveModalProps) {
   const [isSubmitting, setIsSubmitting] = useState<boolean>(false);
   const [isCalculating, setIsCalculating] = useState<boolean>(false);
@@ -70,6 +73,9 @@ export default function PersonnelActivitySaveModal({
   const endDate = Form.useWatch("endDate", form);
   const activityTypeId = Form.useWatch("activityTypeId", form);
   const personnelId = Form.useWatch("personnelId", form);
+  
+  // Watch the form instance's manual day changes to dynamically adapt the credit deduction calculations
+  const formDaysInput = Form.useWatch("days", form);
 
   // 1. Fetch Activity Types
   const { data: fetchedActivities } = useQuery({
@@ -92,18 +98,14 @@ export default function PersonnelActivitySaveModal({
     [fetchedActivities, activityTypeId],
   );
 
-  // 3. EFFECT: Call the API to compute days exactly like the backend
+  // 3. EFFECT: Call the API to compute recommended days
   useEffect(() => {
     const fetchDays = async () => {
       if (startDate && endDate) {
         setIsCalculating(true);
         try {
-          const formattedStart = dayjs(startDate)
-            .startOf("day")
-            .format("YYYY-MM-DD");
-          const formattedEnd = dayjs(endDate)
-            .startOf("day")
-            .format("YYYY-MM-DD");
+          const formattedStart = dayjs(startDate).startOf("day").format("YYYY-MM-DD");
+          const formattedEnd = dayjs(endDate).startOf("day").format("YYYY-MM-DD");
 
           const days = await dayService.computeDays(
             formattedStart,
@@ -112,6 +114,11 @@ export default function PersonnelActivitySaveModal({
             selectedTypeObj?.activityTypeId == 6,
           );
           setServerDays(days);
+          
+          // Fallback: If creating a new record, automatically load the calculated value as the input value
+          if (!selectedActivity) {
+            form.setFieldsValue({ days: days });
+          }
         } catch (err) {
           console.error("Calculation error", err);
         } finally {
@@ -119,11 +126,21 @@ export default function PersonnelActivitySaveModal({
         }
       } else {
         setServerDays(0);
+        if (!selectedActivity) {
+          form.setFieldsValue({ days: undefined });
+        }
       }
     };
 
     fetchDays();
-  }, [startDate, endDate, selectedTypeObj]);
+  }, [startDate, endDate, selectedTypeObj, form, selectedActivity]);
+
+  // Set initial value during editing mode once selectedActivity data wraps into context
+  useEffect(() => {
+    if (selectedActivity?.days) {
+      form.setFieldsValue({ days: selectedActivity.days });
+    }
+  }, [selectedActivity, form]);
 
   // 4. Fetch Credits
   const { data: creditsData } = useQuery({
@@ -138,10 +155,10 @@ export default function PersonnelActivitySaveModal({
     enabled: !!personnelId && !!activityTypeId,
   });
 
-  // 5. Final Calculation for Display
+  // 5. Final Calculation for Balance Deductions (Utilizing manual form inputs if populated)
   const calculation = useMemo(() => {
     const currentCredit = creditsData?.find(
-      (c) => c.activityTypeId === activityTypeId,
+      (c) => c.activityTypeId === activityTypeId
     );
     let remaining = currentCredit?.remainingCredits ?? 0;
 
@@ -154,18 +171,19 @@ export default function PersonnelActivitySaveModal({
       remaining += selectedActivity.days ?? 0;
     }
 
+    const workingDaysCount = formDaysInput ?? serverDays ?? 0;
+
     return {
-      daysPicked: serverDays,
-      balanceAfter: remaining - serverDays,
+      daysPicked: workingDaysCount,
+      balanceAfter: remaining - workingDaysCount,
       totalAvailable: remaining,
     };
-  }, [serverDays, creditsData, activityTypeId, selectedActivity]);
+  }, [serverDays, formDaysInput, creditsData, activityTypeId, selectedActivity]);
 
   const handleOverlap = async () => {
-    // Grab the current input states silently (without showing red UI required errors)
     const values = form.getFieldsValue();
-
     let selectedPersonnelId = user?.personnelId ?? values.personnelId;
+    
     if (selectedPersonnelId && values.startDate && values.endDate) {
       try {
         const payload: PersonnelActivity = {
@@ -173,13 +191,10 @@ export default function PersonnelActivitySaveModal({
           personnelId: selectedPersonnelId,
           endDate: dayjs(values.endDate)?.format("YYYY-MM-DD"),
           startDate: dayjs(values.startDate)?.format("YYYY-MM-DD"),
-          personnelActivityId:
-            selectedActivity?.personnelActivityId ?? undefined,
+          personnelActivityId: selectedActivity?.personnelActivityId ?? undefined,
         };
 
         const res = await personnelActivityService.checkOverlap(payload);
-
-        // If HTTP 200 OK falls through here
         if (res.data && !res.data.hasOverlap) {
           setOverlapError(null);
         }
@@ -190,7 +205,6 @@ export default function PersonnelActivitySaveModal({
           activity?: PersonnelActivity;
         }>;
 
-        // Catch HTTP 400 BadRequest details sent from the controller
         if (axiosError.response?.data?.hasOverlap) {
           setOverlapError(axiosError.response.data.activity);
         } else {
@@ -201,6 +215,7 @@ export default function PersonnelActivitySaveModal({
       setOverlapError(null);
     }
   };
+
   const handleOk = async () => {
     try {
       setIsSubmitting(true);
@@ -214,7 +229,7 @@ export default function PersonnelActivitySaveModal({
         status: "Pending Approval",
         endDate: dayjs(values.endDate)?.format("YYYY-MM-DD"),
         startDate: dayjs(values.startDate)?.format("YYYY-MM-DD"),
-        days: serverDays,
+        days: values.days, // Directly sends the input field's payload value
         personnelActivityId: selectedActivity?.personnelActivityId ?? undefined,
       };
 
@@ -240,25 +255,19 @@ export default function PersonnelActivitySaveModal({
     setOverlapError(null);
     setIsModalVisible(false);
   };
+
   const computedAlertMessage = useMemo(() => {
     if (!overlapError) return "";
 
     const statusText = overlapError.status
-      ? STATUS_DESCRIPTIONS[overlapError.status] ||
-        `is marked as '${overlapError.status}'`
+      ? STATUS_DESCRIPTIONS[overlapError.status] || `is marked as '${overlapError.status}'`
       : "has a conflict";
     const rawTypeName = overlapError.activityType?.activityTypeName;
-
     const titleLabel = overlapError.title ? ` for '${overlapError.title}'` : "";
 
-    const start = overlapError.startDate
-      ? formatDateToMilitary(overlapError.startDate)
-      : "";
-    const end = overlapError.endDate
-      ? formatDateToMilitary(overlapError.endDate)
-      : "";
-    const rangeLabel =
-      start && end ? ` from ${start} to ${end}` : " during this timeframe";
+    const start = overlapError.startDate ? formatDateToMilitary(overlapError.startDate) : "";
+    const end = overlapError.endDate ? formatDateToMilitary(overlapError.endDate) : "";
+    const rangeLabel = start && end ? ` from ${start} to ${end}` : " during this timeframe";
 
     return `${rawTypeName} Conflict: ${statusText}${titleLabel}${rangeLabel}.`;
   }, [overlapError]);
@@ -272,8 +281,7 @@ export default function PersonnelActivitySaveModal({
       onCancel={handleClose}
       okButtonProps={{
         loading: isSubmitting,
-        disabled:
-          isCalculating || calculation.balanceAfter! < 0 || !!overlapError,
+        disabled: isCalculating || calculation.balanceAfter! < 0 || !!overlapError,
       }}
       destroyOnClose
       width={600}
@@ -283,7 +291,6 @@ export default function PersonnelActivitySaveModal({
         form={form}
         initialValues={selectedActivity || emptyValues}
         layout="vertical"
-        // Intercept inline value changes instantly to clear conflicts when inputs switch
         onValuesChange={(changedValues) => {
           if (
             "startDate" in changedValues ||
@@ -294,9 +301,9 @@ export default function PersonnelActivitySaveModal({
           }
         }}
       >
-        <div style={{ display: user?.personnelId ? "none" : "block" }}>
+        <div style={{ display: showPersonnelSelection ? "block" : "none" }}>
           <PersonnelSelectComponent
-            defaultValue={user?.personnelId}
+            defaultValue={showPersonnelSelection ? null : user?.personnelId}
             name="personnelId"
             label="Personnel"
             onChange={() => handleOverlap()}
@@ -323,6 +330,18 @@ export default function PersonnelActivitySaveModal({
           onChangeStart={() => handleOverlap()}
         />
 
+        {/* Custom Input Field for Days Count Choice */}
+        {startDate && endDate && (
+          <Form.Item
+            name="days"
+            label="Days Count Allocation"
+            extra={serverDays > 0 ? `System Recommendation: ${serverDays} Day(s) based on system calendar logic.` : ""}
+            rules={[{ required: true, message: "Please input or accept day allocations" }]}
+          >
+            <InputNumber min={0} style={{ width: "100%" }} placeholder="Input days amount" />
+          </Form.Item>
+        )}
+
         {/* Display Server-Calculated Credits & Active Warnings */}
         {((startDate && endDate) || overlapError) && (
           <div
@@ -346,37 +365,19 @@ export default function PersonnelActivitySaveModal({
 
             {!overlapError && startDate && endDate && (
               <Spin spinning={isCalculating}>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
-                  <Text>Days Requested:</Text>
-                  <Text strong>{serverDays} Day(s)</Text>
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
+                  <Text>Days Deducting:</Text>
+                  <Text strong>{calculation.daysPicked} Day(s)</Text>
                 </div>
-                <div
-                  style={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    marginBottom: 4,
-                  }}
-                >
+                <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                   <Text>Available Credits:</Text>
                   <Text strong style={{ color: "#1677ff" }}>
                     {calculation.totalAvailable} Day(s)
                   </Text>
                 </div>
-                <hr
-                  style={{ border: "0.5px solid #e2e8f0", margin: "8px 0" }}
-                />
-                <div
-                  style={{ display: "flex", justifyContent: "space-between" }}
-                >
-                  <Text>
-                    <b>Remaining After:</b>
-                  </Text>
+                <hr style={{ border: "0.5px solid #e2e8f0", margin: "8px 0" }} />
+                <div style={{ display: "flex", justifyContent: "space-between" }}>
+                  <Text><b>Remaining After:</b></Text>
                   <Text
                     strong
                     type={calculation.balanceAfter! < 0 ? "danger" : "success"}
