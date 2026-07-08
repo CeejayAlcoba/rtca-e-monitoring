@@ -293,181 +293,189 @@ const PersonnelIndex: React.FC = () => {
   };
 
   const columns: ColumnsType<Personnel> = [
-    {
-      title: "Nr",
-      width: 45,
-      render: (_, __, index) => index + 1,
-    },
-    {
-      title: "",
-      key: "profile",
-      dataIndex: "profile",
-      width: 120,
-      render: (value) => (
-        <div style={{ cursor: "pointer" }}>
-          <Image
-            width={80}
-            height={80}
-            style={{ objectFit: "cover", borderRadius: "4px" }}
-            src={imageUtility.getProfile(value)}
-            fallback="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
-            placeholder={
-              <div
-                style={{
-                  width: 80,
-                  height: 80,
-                  background: "#f5f5f5",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <UserOutlined style={{ fontSize: 24, color: "#bfbfbf" }} />
-              </div>
-            }
-            preview={{
-              mask: <div style={{ fontSize: 12 }}>View</div>,
-            }}
-          />
-        </div>
-      ),
-    },
-    {
-      title: "Name",
-      dataIndex: "lastName",
-      key: "lastname",
-      ellipsis: true,
-      render: (_, value: Personnel) => nameFormat(value),
-    },
-    {
-      title: "Designation",
-      key: "departmentsCombination",
-      width: 200,
-      render: (_, record: Personnel) => {
-        const primaryDeptName = record.department?.departmentName;
-        const hasOtherDepts =
-          record.otherDepartmentIds && record.otherDepartmentIds.length > 0;
-
-        const otherDeptNames = hasOtherDepts
-          ? departments
-              ?.filter((dept) =>
-                record.otherDepartmentIds?.includes(dept.departmentId ?? 0),
-              )
-              ?.map((dept) => dept.departmentName)
-              ?.join(", ")
-          : "";
-
-        if (!primaryDeptName && !otherDeptNames) return "";
-
-        return (
-          <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
-            {primaryDeptName && (
-              <span style={{ color: "#1890ff", fontWeight: 700 }}>
-                {primaryDeptName}
-              </span>
-            )}
-            {otherDeptNames && (
-              <span style={{ color: "#8c8c8c", fontSize: "12px" }}>
-                {primaryDeptName ? (
-                  <>
-                    <b>Other:</b> {otherDeptNames}
-                  </>
-                ) : (
-                  otherDeptNames
-                )}
-              </span>
-            )}
-          </div>
-        );
-      },
-    },
-    {
-      title: "Email",
-      dataIndex: "email",
-      key: "email",
-    },
-    {
-      title: "Date Entered Service",
-      dataIndex: "dateEnteredService",
-      key: "dateEnteredService",
-      render: (value) => (value ? formatDateToMilitary(value) : ""),
-    },
-    {
-      title: "Date Enlisted/Commissioned",
-      dataIndex: "dateEnlisted",
-      key: "dateEnlisted",
-      render: (value) => (value ? formatDateToMilitary(value) : ""),
-    },
-    {
-      title: "Last Promotion",
-      dataIndex: "dateOfLastPromotion",
-      key: "dateOfLastPromotion",
-      render: (value) => (value ? formatDateToMilitary(value) : ""),
-    },
-    {
-      title: "Has Account",
-      key: "hasAccount",
-      dataIndex: "hasAccount",
-      width: 100,
-      align: "center",
-      filters: [
-        { text: "Yes", value: true },
-        { text: "No", value: false },
-      ],
-      render: (value) => {
-        return value ? (
-          <CheckOutlined
-            style={{ color: "#52c41a", fontSize: "16px", fontWeight: "bold" }}
-          />
-        ) : (
-          <CloseOutlined
-            style={{ color: "#ff4d4f", fontSize: "16px", fontWeight: "bold" }}
-          />
-        );
-      },
-    },
-    {
-      title: "Actions",
-      key: "actions",
-      fixed: "left",
-      render: (_, record) => (
-        <Space>
-          <Tooltip title="View Leave Credits">
-            <Button
-              type="text"
-              icon={<HistoryOutlined />}
-              onClick={() => openHistoryModal(record)}
-            />
-          </Tooltip>
-          {!record.hasAccount && (
-            <Tooltip title="Create System Account">
-              <Button
-                type="text"
-                style={{ color: "#722ed1" }}
-                icon={<UserAddOutlined />}
-                onClick={() => openUserModal(record)}
-              />
-            </Tooltip>
-          )}
-          <Tooltip title="Edit">
-            <Button
-              type="text"
-              icon={<EditOutlined />}
-              onClick={() => openModal(record)}
-            />
-          </Tooltip>
-          <Tooltip title="Delete">
-            <Popconfirm
-              title="Are you sure to delete?"
-              onConfirm={() => handleDelete(record?.personnelId ?? 0)}
+  {
+    title: "Nr",
+    width: 30,
+    align: "center",
+    render: (_, __, index) => index + 1,
+  },
+  {
+    title: "Profile",
+    key: "personnelProfile",
+    ellipsis:false,
+    render: (_, record: Personnel) => (
+      <div 
+        style={{ 
+          cursor: "pointer", 
+          display: "flex", 
+          flexDirection: "column", 
+          alignItems: "center", 
+          justifyContent: "center",
+          gap: "4px", 
+          textAlign: "center",
+          padding: "4px 0"
+        }}
+      >
+        {/* 1. Profile Image */}
+        <Image
+          width={80}
+          height={80}
+          style={{ objectFit: "cover", borderRadius: "4px" }}
+          src={imageUtility.getProfile(record.profile)}
+          fallback="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
+          placeholder={
+            <div
+              style={{
+                width: 80,
+                height: 80,
+                background: "#f5f5f5",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
             >
-              <Button type="text" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Tooltip>
-        </Space>
-      ),
+              <UserOutlined style={{ fontSize: 24, color: "#bfbfbf" }} />
+            </div>
+          }
+          preview={{
+            mask: <div style={{ fontSize: 12 }}>View</div>,
+          }}
+        />
+        
+        {/* 2. Bold Name Format */}
+        <span style={{ fontSize: "14px", fontWeight: 600, lineHeight: "1.2", color: "#262626" }}>
+          {nameFormat(record)}
+        </span>
+
+        {/* 3. Gray Encoded Email Address */}
+        {record.email && (
+          <span style={{ fontSize: "12px", color: "#8c8c8c", lineHeight: "1" }}>
+            {record.email}
+          </span>
+        )}
+      </div>
+    ),
+  },
+  {
+    title: "Designation",
+    key: "departmentsCombination",
+    width: 200,
+    render: (_, record: Personnel) => {
+      const primaryDeptName = record.department?.departmentName;
+      const hasOtherDepts =
+        record.otherDepartmentIds && record.otherDepartmentIds.length > 0;
+
+      const otherDeptNames = hasOtherDepts
+        ? departments
+            ?.filter((dept) =>
+              record.otherDepartmentIds?.includes(dept.departmentId ?? 0),
+            )
+            ?.map((dept) => dept.departmentName)
+            ?.join(", ")
+        : "";
+
+      if (!primaryDeptName && !otherDeptNames) return "";
+
+      return (
+        <div style={{ display: "flex", flexDirection: "column", gap: "2px" }}>
+          {primaryDeptName && (
+            <span style={{ color: "#1890ff", fontWeight: 700 }}>
+              {primaryDeptName}
+            </span>
+          )}
+          {otherDeptNames && (
+            <span style={{ color: "#8c8c8c", fontSize: "12px" }}>
+              {primaryDeptName ? (
+                <>
+                  <b>Other:</b> {otherDeptNames}
+                </>
+              ) : (
+                otherDeptNames
+              )}
+            </span>
+          )}
+        </div>
+      );
     },
-  ];
+  },
+  {
+    title: "Date Entered Service",
+    dataIndex: "dateEnteredService",
+    key: "dateEnteredService",
+    render: (value) => (value ? formatDateToMilitary(value) : ""),
+  },
+  {
+    title: "Date Enlisted/Commissioned",
+    dataIndex: "dateEnlisted",
+    key: "dateEnlisted",
+    render: (value) => (value ? formatDateToMilitary(value) : ""),
+  },
+  {
+    title: "Last Promotion",
+    dataIndex: "dateOfLastPromotion",
+    key: "dateOfLastPromotion",
+    render: (value) => (value ? formatDateToMilitary(value) : ""),
+  },
+  {
+    title: "Has Account",
+    key: "hasAccount",
+    dataIndex: "hasAccount",
+    width: 100,
+    align: "center",
+    filters: [
+      { text: "Yes", value: true },
+      { text: "No", value: false },
+    ],
+    render: (value) => {
+      return value ? (
+        <CheckOutlined style={{ color: "#52c41a", fontSize: "16px", fontWeight: "bold" }} />
+      ) : (
+        <CloseOutlined style={{ color: "#ff4d4f", fontSize: "16px", fontWeight: "bold" }} />
+      );
+    },
+  },
+  {
+    title: "Actions",
+    key: "actions",
+    fixed: "left",
+    render: (_, record) => (
+      <Space>
+        <Tooltip title="View Leave Credits">
+          <Button
+            type="text"
+            icon={<HistoryOutlined />}
+            onClick={() => openHistoryModal(record)}
+          />
+        </Tooltip>
+        {!record.hasAccount && (
+          <Tooltip title="Create System Account">
+            <Button
+              type="text"
+              style={{ color: "#722ed1" }}
+              icon={<UserAddOutlined />}
+              onClick={() => openUserModal(record)}
+            />
+          </Tooltip>
+        )}
+        <Tooltip title="Edit">
+          <Button
+            type="text"
+            icon={<EditOutlined />}
+            onClick={() => openModal(record)}
+          />
+        </Tooltip>
+        <Tooltip title="Delete">
+          <Popconfirm
+            title="Are you sure to delete?"
+            onConfirm={() => handleDelete(record?.personnelId ?? 0)}
+          >
+            <Button type="text" danger icon={<DeleteOutlined />} />
+          </Popconfirm>
+        </Tooltip>
+      </Space>
+    ),
+  },
+];
 
   return (
     <div>

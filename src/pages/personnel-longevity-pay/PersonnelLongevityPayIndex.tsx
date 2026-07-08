@@ -201,14 +201,24 @@ export default function PersonnelLongevityPayIndex() {
       title: "",
       key: "profile",
       dataIndex: "profile",
-      width: 120,
-      render: (value) => (
-        <div style={{ cursor: "pointer" }}>
+      ellipsis: false,
+      render: (_, record: PersonnelLongevityPay) => (
+        <div
+          style={{
+            cursor: "pointer",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center",
+            justifyContent: "center",
+            gap: "6px",
+            textAlign: "center"
+          }}
+        >
           <Image
             width={80}
             height={80}
             style={{ objectFit: "cover", borderRadius: "4px" }}
-            src={imageUtility.getProfile(value)}
+            src={imageUtility.getProfile(record.profile)}
             fallback="https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y"
             placeholder={
               <div
@@ -228,17 +238,13 @@ export default function PersonnelLongevityPayIndex() {
               mask: <div style={{ fontSize: 12 }}>View</div>,
             }}
           />
+          <span style={{ fontSize: "13px", fontWeight: 500, lineHeight: "1.2", display: "block" }}>
+            {nameFormat(record)}
+          </span>
         </div>
-      ),
+      )
     },
-    {
-      title: "Name",
-      dataIndex: "lastName",
-      key: "lastname",
-      ellipsis: true,
-      // Typings match your new type contract
-      render: (_, record: PersonnelLongevityPay) => nameFormat(record),
-    },
+
     {
       title: "Date Entered Service",
       dataIndex: "dateEnteredService",

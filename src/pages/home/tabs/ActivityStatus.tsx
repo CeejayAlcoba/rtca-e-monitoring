@@ -2,7 +2,7 @@ import { Button, Spin, Table } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { convertUtcToPhDateShort } from "../../../utils/convertUtcToPhDateShort";
 import nameFormat from "../../../utils/nameFormat";
-import { useRef } from "react";
+import { useRef, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import dashboardService from "../../../services/dashboardService";
 
@@ -10,12 +10,16 @@ import dashboardService from "../../../services/dashboardService";
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
 
-// PDF
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
-import type { NameDTO } from "../../../@types/dashboardGraphs/ActivityData";
+
+import { type NameDTO } from "../../../@types/dashboardGraphs/ActivityData";
 import { formatDateToMilitary } from "../../../utils/formatDateToMilitary";
 import getRandomColor from "../../../utils/getRandomColor";
+import { usePDFTable, type PDFColumn } from "../../../hooks/documents/usePDFTable";
+
+// Define the interface shape for the flattened list configuration 
+interface FlattenedPersonnel extends NameDTO {
+  parentActivity: string;
+}
 
 function ActivityStatus() {
   const printRef = useRef<HTMLDivElement>(null);
@@ -24,11 +28,82 @@ function ActivityStatus() {
     queryKey: ["personnelActivityData"],
     queryFn: async () => await dashboardService.getPersonnelByActivityType(),
     initialData: [],
-    refetchInterval:30000,
+    refetchInterval: 30000,
   });
 
-  // ---------------- TABLE COLUMNS ----------------
+  // ---------------- FLAT DATA PREPARATION FOR LEDGER REPORT ----------------
+  const combinedPdfData = useMemo<FlattenedPersonnel[]>(() => {
+    if (!personnelActivityData) return [];
+    const elements: FlattenedPersonnel[] = [];
 
+    personnelActivityData.forEach((actBlock) => {
+      actBlock.info.forEach((person) => {
+        elements.push({
+          ...person,
+          parentActivity: actBlock.activity,
+        });
+      });
+    });
+    return elements;
+  }, [personnelActivityData]);
+
+  // ---------------- THE usePDFTable CONFIGURATION ----------------
+  const pdfColumns: PDFColumn<FlattenedPersonnel>[] = [
+    {
+      header: "Nr",
+      dataKey: "nr",
+      render: (_, __, idx) => String(idx + 1),
+    },
+    {
+      header: "Status",
+      dataKey: "parentActivity",
+      render: (val) => String(val).toUpperCase(),
+    },
+    {
+      header: "Rank",
+      dataKey: "rank",
+      render: (_, record) => record.name?.rank?.rankCode ?? "",
+    },
+    {
+      header: "Name",
+      dataKey: "fullName",
+      render: (_, record) => nameFormat(record.name),
+    },
+    {
+      header: "Serial",
+      dataKey: "serialNumber",
+      render: (_, record) => record.name?.serialNumber ?? "",
+    },
+    {
+      header: "Title / Duration",
+      dataKey: "title",
+      render: (_, record) => {
+        if (record.parentActivity.toLowerCase() === "on duty") return "";
+        if (!record.startDate || !record.endDate) return record.title ?? "";
+        return `${record.title} (${convertUtcToPhDateShort(record.startDate)} - ${convertUtcToPhDateShort(record.endDate)})`;
+      },
+    },
+  ];
+
+  const { handleDownloadPDF } = usePDFTable<FlattenedPersonnel>({
+    columns: pdfColumns,
+    data: combinedPdfData,
+    orientation: "portrait",
+    fileName: "Personnel_Activity_Summary_Report",
+    headerMode: "firstPageOnly",
+    titleNode: <div>
+      Activity Report ({formatDateToMilitary(new Date())})
+    </div>,
+    getRowStyle: (record) => {
+      return {
+        lineWidth: 0.013,
+        lineColor: [0, 0, 0],
+        fontStyle: record.name?.rank?.rankLevel && record.name.rank.rankLevel <= 5 ? "bold" : "normal",
+      };
+    },
+  });
+
+  // ---------------- ANTD INLINE TABLE COLUMNS ----------------
   const columns = (activity: string): ColumnsType<NameDTO> => [
     {
       title: "Nr",
@@ -42,21 +117,18 @@ function ActivityStatus() {
       render: (record: NameDTO) => nameFormat(record.name),
       align: "center",
     },
-
     {
       title: "Title / Duration",
       align: "center",
       render: (record) => {
         if (activity.toLowerCase() === "on duty") return "";
-
         if (!record.startDate || !record.endDate) return record.title;
 
         return (
           <div className="grid grid-cols-1">
             <strong>{record.title}</strong>
             <div>
-              {convertUtcToPhDateShort(record.startDate)} -
-              {convertUtcToPhDateShort(record.endDate)}
+              {convertUtcToPhDateShort(record.startDate)} - {convertUtcToPhDateShort(record.endDate)}
             </div>
           </div>
         );
@@ -65,13 +137,12 @@ function ActivityStatus() {
   ];
 
   const getColumns = (activity: string) => {
-    if (activity == "On duty")
-      return columns(activity).filter((c) => c.title != "Title / Duration");
+    if (activity === "On duty")
+      return columns(activity).filter((c) => c.title !== "Title / Duration");
     return columns(activity);
   };
 
   // ---------------- EXCEL EXPORT ----------------
-
   const handleExportExcel = () => {
     const excelData: any[] = [];
 
@@ -82,9 +153,7 @@ function ActivityStatus() {
           Personnel: nameFormat(info.name),
           Title: info.title ?? "",
           SerialNumber: info.name.serialNumber,
-          StartDate: info.startDate
-            ? convertUtcToPhDateShort(info.startDate)
-            : "",
+          StartDate: info.startDate ? convertUtcToPhDateShort(info.startDate) : "",
           EndDate: info.endDate ? convertUtcToPhDateShort(info.endDate) : "",
         });
       });
@@ -92,97 +161,18 @@ function ActivityStatus() {
 
     const worksheet = XLSX.utils.json_to_sheet(excelData);
     const workbook = XLSX.utils.book_new();
-
     XLSX.utils.book_append_sheet(workbook, worksheet, "Activity Data");
 
-    const excelBuffer = XLSX.write(workbook, {
-      bookType: "xlsx",
-      type: "array",
-    });
-
-    const blob = new Blob([excelBuffer], {
-      type: "application/octet-stream",
-    });
-
+    const excelBuffer = XLSX.write(workbook, { bookType: "xlsx", type: "array" });
+    const blob = new Blob([excelBuffer], { type: "application/octet-stream" });
     saveAs(blob, "ActivityData.xlsx");
   };
 
-  // ---------------- PDF EXPORT ----------------
-
-  const handleExportPDF = () => {
-    const doc = new jsPDF({ unit: "pt", format: "a4" });
-
-    let y = 40;
-
-    doc.setFontSize(18);
-    doc.setTextColor("#5B8FF9");
-    doc.text("Personnel by Activity Report", 40, y);
-
-    y += 30;
-
-    personnelActivityData.forEach((activity) => {
-      doc.setFontSize(14);
-      doc.setTextColor("#5B8FF9");
-
-      doc.text(`${activity.activity} (${activity.personnel})`, 40, y);
-
-      y += 10;
-
-      const body = activity.info.map((info, i) => [
-        i + 1,
-        info.name.rank?.rankCode ?? "",
-        info.name.lastName ?? "",
-        info.name.firstName ?? "",
-        info.name.middleName?.charAt(0) ?? "",
-        info.name.serialNumber ?? "",
-        activity.activity.toLowerCase() === "on duty" ? "" : (info.title ?? ""),
-        info.startDate ? convertUtcToPhDateShort(info.startDate) : "",
-        info.endDate ? convertUtcToPhDateShort(info.endDate) : "",
-      ]);
-
-      autoTable(doc, {
-        startY: y,
-        head: [
-          [
-            "#",
-            "Rank",
-            "Lastname",
-            "Firstname",
-            "MI",
-            "Serial",
-            "Title",
-            "Start",
-            "End",
-          ],
-        ],
-        body,
-        theme: "grid",
-        headStyles: { fillColor: [91, 143, 249] },
-        styles: { fontSize: 10 },
-        margin: { left: 40, right: 40 },
-        didDrawPage: (data) => {
-          y = (data.cursor?.y ?? 0) + 20;
-        },
-      });
-
-      if (y > doc.internal.pageSize.height - 100) {
-        doc.addPage();
-        y = 40;
-      }
-    });
-
-    doc.save("ActivityData.pdf");
-  };
-
   // ---------------- PRINT ----------------
-
   const handlePrint = () => {
     if (!printRef.current) return;
-
     const printContents = printRef.current.innerHTML;
-
     const printWindow = window.open("", "", "width=900,height=600");
-
     if (!printWindow) return;
 
     printWindow.document.write(`
@@ -202,7 +192,6 @@ function ActivityStatus() {
       </body>
       </html>
     `);
-
     printWindow.document.close();
     printWindow.print();
   };
@@ -222,7 +211,7 @@ function ActivityStatus() {
           Export Excel
         </Button>
 
-        <Button type="primary" onClick={handleExportPDF}>
+        <Button type="primary" onClick={handleDownloadPDF}>
           Export PDF
         </Button>
       </div>
@@ -240,8 +229,7 @@ function ActivityStatus() {
                   columns={getColumns(activity.activity)}
                   dataSource={[...activity.info].sort(
                     (a, b) =>
-                      (a.name?.rank?.rankLevel ?? 0) -
-                      (b.name?.rank?.rankLevel ?? 0),
+                      (a.name?.rank?.rankLevel ?? 0) - (b.name?.rank?.rankLevel ?? 0)
                   )}
                   pagination={false}
                   bordered

@@ -1,5 +1,5 @@
 import React, { useMemo, useRef } from "react";
-import { Table, Tag, Typography, Card, Button, Badge } from "antd";
+import { Typography, Card, Button, Badge } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -13,33 +13,19 @@ import nameFormat from "../../../utils/nameFormat";
 // Third-Party Data Export Tools
 import * as XLSX from "xlsx";
 import { saveAs } from "file-saver";
-import jsPDF from "jspdf";
-import autoTable from "jspdf-autotable";
 import { usePrint } from "../../../hooks/documents/usePrint";
-import { useResponsiveLayout } from "../../../hooks/useResponsiveLayout"; // Imported your hook
+import { useResponsiveLayout } from "../../../hooks/useResponsiveLayout";
+import { usePDFTable, type PDFColumn } from "../../../hooks/documents/usePDFTable";
+import { formatDateToMilitary } from "../../../utils/formatDateToMilitary";
 
 const { Text } = Typography;
 
 const getRandomColor = (index?: number) => {
   const colors = [
-    "#E11D48",
-    "#008080",
-    "#6D28D9",
-    "#D97706",
-    "#4D7C0F",
-    "#1E6091",
-    "#C2410C",
-    "#0891B2",
-    "#059669",
-    "#B45309",
-    "#BE185D",
-    "#2563EB",
-    "#4338CA",
-    "#C026D3",
-    "#15803D",
-    "#0284C7",
-    "#7C3AED",
-    "#DB2777",
+    "#E11D48", "#008080", "#6D28D9", "#D97706", "#4D7C0F",
+    "#1E6091", "#C2410C", "#0891B2", "#059669", "#B45309",
+    "#BE185D", "#2563EB", "#4338CA", "#C026D3", "#15803D",
+    "#0284C7", "#7C3AED", "#DB2777",
   ];
   if (index || index === 0) return colors[index % colors.length];
   return colors[Math.floor(Math.random() * colors.length)];
@@ -50,13 +36,6 @@ const hexToRgba = (hex: string, alpha: number): string => {
   const g = parseInt(hex.slice(3, 5), 16);
   const b = parseInt(hex.slice(5, 7), 16);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
-};
-
-const hexToRgbArray = (hex: string): [number, number, number] => {
-  const r = parseInt(hex.slice(1, 3), 16) || 0;
-  const g = parseInt(hex.slice(3, 5), 16) || 0;
-  const b = parseInt(hex.slice(5, 7), 16) || 0;
-  return [r, g, b];
 };
 
 interface FlattenedPersonnel {
@@ -72,9 +51,9 @@ interface FlattenedPersonnel {
 }
 
 export const ByColorLegend: React.FC = () => {
-  const { isMobile } = useResponsiveLayout(); // Detect viewport scales dynamically
+  const { isMobile } = useResponsiveLayout();
 
-  const { data: personnelActivityData = [], isLoading } = useQuery({
+  const { data: personnelActivityData = [] } = useQuery({
     queryKey: ["personnelActivityData"],
     queryFn: async () => await dashboardService.getPersonnelByActivityType(),
     initialData: [],
@@ -173,7 +152,78 @@ export const ByColorLegend: React.FC = () => {
     };
   }, [personnelActivityData]);
 
-  // Export handlers remain exactly as they were...
+  const pdfColumns: PDFColumn<FlattenedPersonnel>[] = [
+    {
+      header: "Nr.",
+      dataKey: "key",
+      render: (_, __, index) => String(index + 1),
+    },
+    {
+      header: "Full Name",
+      dataKey: "fullName",
+    },
+    {
+      header: "Status Activity",
+      dataKey: "currentActivity",
+      render: (val) => String(val || "N/A").toUpperCase(),
+    },
+  ];
+
+  // Combine both datasets together so they render linearly in your custom hook layout
+  const combinedPdfData = useMemo(() => {
+    return [...processedGroups.Officers, ...processedGroups.NonOfficers];
+  }, [processedGroups]);
+
+  const hexToRgbArray = (hex: string): [number, number, number] => {
+    const r = parseInt(hex.slice(1, 3), 16) || 0;
+    const g = parseInt(hex.slice(3, 5), 16) || 0;
+    const b = parseInt(hex.slice(5, 7), 16) || 0;
+    return [r, g, b];
+  };
+  const { handleDownloadPDF } = usePDFTable<FlattenedPersonnel>({
+    columns: pdfColumns,
+    data: combinedPdfData,
+    orientation: "portrait",
+    fileName: "Personnel Activity Summary Report",
+    headerMode: "firstPageOnly",
+    titleNode: <div>
+      Activity Report ({formatDateToMilitary(new Date())})
+    </div>,
+    getRowStyle: (r) => {
+
+      const borderStyles = {
+        lineWidth: 0.013,
+        lineColor: [0, 0, 0] as [number, number, number], // Pure Black RGB
+      };
+
+      if (!r?.currentActivity) {
+        return borderStyles;
+      }
+
+      const actKey = r.currentActivity.toUpperCase();
+      const metrics = activityMetrics[actKey];
+
+      if (actKey === "ON DUTY" || !metrics) {
+        return borderStyles;
+      }
+
+      const rgb = hexToRgbArray(metrics.color);
+      const tintedBg: [number, number, number] = [
+        Math.round(rgb[0] + (255 - rgb[0]) * 0.55),
+        Math.round(rgb[1] + (255 - rgb[1]) * 0.55),
+        Math.round(rgb[2] + (255 - rgb[2]) * 0.55),
+      ];
+
+      // 2. Combine the background styling cleanly with your black border definition
+      return {
+        ...borderStyles,
+        fillColor: tintedBg,
+        textColor: [0, 0, 0],
+        fontStyle: r.groupType === "Officer" ? "bold" : "normal",
+      };
+    },
+  });
+
   const handleExportExcel = () => {
     const workbook = XLSX.utils.book_new();
     const mapToExcelData = (list: FlattenedPersonnel[]) =>
@@ -199,11 +249,7 @@ export const ByColorLegend: React.FC = () => {
       const nonOfficerSheet = XLSX.utils.json_to_sheet(
         mapToExcelData(processedGroups.NonOfficers),
       );
-      XLSX.utils.book_append_sheet(
-        workbook,
-        nonOfficerSheet,
-        "Non-Officers Division",
-      );
+      XLSX.utils.book_append_sheet(workbook, nonOfficerSheet, "Non-Officers Division");
     }
 
     const excelBuffer = XLSX.write(workbook, {
@@ -219,111 +265,6 @@ export const ByColorLegend: React.FC = () => {
     );
   };
 
-  const handleExportPdf = () => {
-    const doc = new jsPDF("p", "pt", "a4");
-    doc.setFont("helvetica", "bold");
-    doc.setFontSize(20);
-    doc.text("PERSONNEL ACTIVITY SUMMARY REPORT", 40, 45);
-
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(10);
-    doc.text(`Generated on: ${new Date().toLocaleString()}`, 40, 65);
-
-    const pdfColumns = ["Nr.", "Full Name", "Status Activity"];
-    const mapToPdfRows = (list: FlattenedPersonnel[]) =>
-      list.map((p, index) => [
-        index + 1,
-        p.fullName ?? "N/A",
-        (p.currentActivity ?? "N/A").toUpperCase(),
-      ]);
-
-    let finalY = 80;
-
-    if (processedGroups.Officers.length > 0) {
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text(
-        `1. Officers Table (${processedGroups.Officers.length} Records)`,
-        40,
-        finalY,
-      );
-
-      autoTable(doc, {
-        startY: finalY + 10,
-        head: [pdfColumns],
-        body: mapToPdfRows(processedGroups.Officers),
-        styles: { font: "helvetica", fontSize: 9 },
-        headStyles: { fillColor: [30, 96, 145], textColor: [255, 255, 255] },
-        theme: "grid",
-        didParseCell: (data) => {
-          if (data.section === "body") {
-            const rowIndex = data.row.index;
-            const item = processedGroups.Officers[rowIndex];
-            if (item?.currentActivity) {
-              const actKey = item.currentActivity.toUpperCase();
-              if (actKey !== "ON DUTY" && activityMetrics[actKey]) {
-                const hexColor = activityMetrics[actKey].color;
-                const rgb = hexToRgbArray(hexColor);
-                data.cell.styles.fillColor = [
-                  Math.round(rgb[0] + (255 - rgb[0]) * 0.55),
-                  Math.round(rgb[1] + (255 - rgb[1]) * 0.55),
-                  Math.round(rgb[2] + (255 - rgb[2]) * 0.55),
-                ];
-                data.cell.styles.textColor = [0, 0, 0];
-              }
-            }
-          }
-        },
-      });
-      finalY = (doc as any).lastAutoTable.finalY + 30;
-    }
-
-    if (processedGroups.NonOfficers.length > 0) {
-      if (finalY > 750) {
-        doc.addPage();
-        finalY = 50;
-      }
-      doc.setFont("helvetica", "bold");
-      doc.setFontSize(14);
-      doc.text(
-        `2. Non-Officers Table (${processedGroups.NonOfficers.length} Records)`,
-        40,
-        finalY,
-      );
-
-      autoTable(doc, {
-        startY: finalY + 10,
-        head: [pdfColumns],
-        body: mapToPdfRows(processedGroups.NonOfficers),
-        styles: { font: "helvetica", fontSize: 9 },
-        headStyles: { fillColor: [0, 128, 128], textColor: [255, 255, 255] },
-        theme: "grid",
-        didParseCell: (data) => {
-          if (data.section === "body") {
-            const rowIndex = data.row.index;
-            const item = processedGroups.NonOfficers[rowIndex];
-            if (item?.currentActivity) {
-              const actKey = item.currentActivity.toUpperCase();
-              if (actKey !== "ON DUTY" && activityMetrics[actKey]) {
-                const hexColor = activityMetrics[actKey].color;
-                const rgb = hexToRgbArray(hexColor);
-                data.cell.styles.fillColor = [
-                  Math.round(rgb[0] + (255 - rgb[0]) * 0.55),
-                  Math.round(rgb[1] + (255 - rgb[1]) * 0.55),
-                  Math.round(rgb[2] + (255 - rgb[2]) * 0.55),
-                ];
-                data.cell.styles.textColor = [0, 0, 0];
-              }
-            }
-          }
-        },
-      });
-    }
-    doc.save(
-      `Personnel_Ledger_Matrix_${new Date().toISOString().slice(0, 10)}.pdf`,
-    );
-  };
-
   const columns: ColumnsType<FlattenedPersonnel> = [
     {
       title: "#",
@@ -334,7 +275,7 @@ export const ByColorLegend: React.FC = () => {
       ),
     },
     {
-      title: "Full Name",
+      title: "Name",
       dataIndex: "fullName",
       key: "fullName",
       render: (text, record) => (
@@ -355,27 +296,24 @@ export const ByColorLegend: React.FC = () => {
       ),
     },
     {
-      title: "Status Activity",
+      title: "Activity",
       dataIndex: "currentActivity",
       key: "currentActivity",
       className: "hide-column-on-print",
-      width: isMobile ? 130 : undefined, // Explicit bounds on tiny screens
+      width: isMobile ? 130 : undefined,
       render: (activity: string) => {
         if (!activity) return null;
-        const baseColor =
-          activityMetrics[activity.toUpperCase()]?.color || "#cbd5e1";
+
         return (
-          <Tag
-            color={baseColor}
+          <span
             style={{
               fontWeight: "900",
               color: "#000000",
-              border: "1px solid rgba(0,0,0,0.35)",
               marginRight: 0,
             }}
           >
             {activity.toUpperCase()}
-          </Tag>
+          </span>
         );
       },
     },
@@ -418,7 +356,6 @@ export const ByColorLegend: React.FC = () => {
         size="small"
         style={{ marginBottom: "20px" }}
       >
-        {/* Tailwind structural changes for responsive grid/flex layout shifts */}
         <div className="flex flex-col gap-4 lg:flex-row lg:justify-between lg:items-center">
           {/* Badge Legend Container */}
           <div className="flex flex-wrap gap-2">
@@ -492,7 +429,7 @@ export const ByColorLegend: React.FC = () => {
             <Button
               type="primary"
               icon={<FilePdfOutlined />}
-              onClick={handleExportPdf}
+              onClick={handleDownloadPDF} // Attached directly to the usePDFTable execution handler
               className="flex-1 lg:flex-none"
               style={{
                 backgroundColor: "#B91C1C",
@@ -506,45 +443,70 @@ export const ByColorLegend: React.FC = () => {
         </div>
       </Card>
 
-      {/* Main Table Document Canvas Wrapper */}
+      {/* Main Table Canvas Wrapper */}
       <div ref={ref} className="flex flex-col gap-6">
-        {/* Officers Table */}
-        <Table
-          title={() => (
-            <span
-              style={{ fontWeight: 800, fontSize: "15px", color: "#000000" }}
-            >
-              Officers ({processedGroups.Officers.length})
-            </span>
-          )}
-          columns={columns}
-          dataSource={processedGroups.Officers}
-          pagination={false}
-          rowClassName={getRowClassName}
-          loading={isLoading}
-          scroll={{ x: isMobile ? 400 : undefined }} // Enables elastic side-scroll on small views
-          size={"small"}
-          bordered
-        />
+        <table className="table table-striped">
+          <thead>
+            <tr>
+              {columns.map((c, i) => (
+                <th key={c.key || i} scope="col">
+                  {c.title as string}
+                </th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {processedGroups.Officers.map((o, index) => (
+              <tr key={o.key || index} className={`${getRowClassName(o)} font-bold`}>
+                {columns.map((c) => {
+                  const cellContent = c.render
+                    ? c.render(o[c.key as keyof FlattenedPersonnel], o, index)
+                    : o[c.key as keyof FlattenedPersonnel];
 
-        {/* Non-Officers Table */}
-        <Table
-          title={() => (
-            <span
-              style={{ fontWeight: 800, fontSize: "15px", color: "#000000" }}
-            >
-              Non-Officers ({processedGroups.NonOfficers.length})
-            </span>
-          )}
-          columns={columns}
-          dataSource={processedGroups.NonOfficers}
-          pagination={false}
-          rowClassName={getRowClassName}
-          loading={isLoading}
-          scroll={{ x: isMobile ? 400 : undefined }} // Enables elastic side-scroll on small views
-          size="small"
-          bordered
-        />
+                  const renderedNode =
+                    cellContent &&
+                      typeof cellContent === "object" &&
+                      "children" in cellContent
+                      ? (cellContent as any).children
+                      : cellContent;
+
+                  return (
+                    <td key={c.key} style={{ fontWeight: "bold" }}>
+                      {renderedNode as React.ReactNode}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+
+            <tr>
+              <td colSpan={3}></td>
+            </tr>
+
+            {processedGroups.NonOfficers.map((non, index) => (
+              <tr key={non.key || index} className={getRowClassName(non)}>
+                {columns.map((c) => {
+                  const cellContent = c.render
+                    ? c.render(non[c.key as keyof FlattenedPersonnel], non, index)
+                    : non[c.key as keyof FlattenedPersonnel];
+
+                  const renderedNode =
+                    cellContent &&
+                      typeof cellContent === "object" &&
+                      "children" in cellContent
+                      ? (cellContent as any).children
+                      : cellContent;
+
+                  return (
+                    <td key={c.key}>
+                      {renderedNode as React.ReactNode}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
       </div>
     </div>
   );

@@ -235,9 +235,9 @@ export default function LeaveCreditsFormat({
                     style={{ borderLeftColor: color }}
                   >
                     <div className="flex justify-between items-start mb-4">
-                      <h3 className="font-bold text-gray-700 m-0 truncate pr-2">
+                      <strong className="font-bold text-gray-700 m-0 truncate pr-2">
                         {leave.activityTypeName}
-                      </h3>
+                      </strong>
                       <Tag color={color} className="mr-0 rounded-full font-bold">
                         {leave.remainingCredits} Left
                       </Tag>
@@ -276,9 +276,9 @@ export default function LeaveCreditsFormat({
       <div className="mt-8 pt-6 border-t border-gray-100">
         <div className="flex items-center mb-4">
           <div className="h-6 w-1 bg-blue-500 rounded-full mr-2"></div>
-          <h3 className="text-lg font-bold text-gray-800 m-0">
+          <strong className="text-lg font-bold text-gray-800 m-0">
             Activity Breakdown
-          </h3>
+          </strong>
         </div>
         <PersonnelActivitiesTable
           selectedPersonnel={selectedPersonnel}

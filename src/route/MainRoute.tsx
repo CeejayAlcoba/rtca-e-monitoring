@@ -23,7 +23,6 @@ import AuthPage from "../pages/auth/authPage";
 import ChangeDefaultPassword from "../pages/auth/ChangeDefaultPassword";
 import EteExplanationIndex from "../pages/ete-email-layout/EteExplanationIndex";
 import EteNotifyIndex from "../pages/ete-email-layout/EteNotifyIndex";
-import ApprovalProcessIndex from "../pages/approvalProcess/ApprovalProcessIndex";
 import SidebarIndex from "../pages/role-sidebar/RoleSidebarIndex";
 import ApproverPage from "../pages/approver/ApproverIndex";
 import ActivityAppealForm from "../pages/appeal/ActivityAppealForm";
@@ -33,6 +32,7 @@ import MyDepartmentIndex from "../pages/my-department/MyDepartmentIndex";
 import LongevityPayIndex from "../pages/longevity-pay/LongevityPayIndex";
 import PersonnelLongevityPayIndex from "../pages/personnel-longevity-pay/PersonnelLongevityPayIndex";
 import ManualActivityIndex from "../pages/manual-activity/ManualActivityndex";
+import TestPage from "../pages/test/TestPage";
 
 // Import your pages... (omitted for brevity, keep your existing imports)
 
@@ -144,7 +144,7 @@ export default function MainRoute() {
           path="/activities/appeal/:token"
           element={<ActivityAppealForm />}
         />
-        <Route path="/test" element={<ApprovalProcessIndex />} />
+        <Route path="/test" element={<TestPage />} />
 
         {/* Global Redirect */}
         <Route path="*" element={<Navigate to="/auth" replace />} />

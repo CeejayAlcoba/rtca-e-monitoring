@@ -151,7 +151,7 @@ export default function PersonnelActivitiesTable({
       title={() => (
         <div className="flex justify-between items-center">
           <div className="flex items-center gap-4">
-            <h2 className="text-lg font-semibold">Leave History</h2>
+            <strong className="text-lg font-semibold">Leave History</strong>
             <Space>
               <Tooltip title="Download Excel">
                 <Button icon={<FileExcelOutlined />} onClick={exportToExcel}>
