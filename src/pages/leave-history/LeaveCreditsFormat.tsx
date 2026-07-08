@@ -1,4 +1,4 @@
-import { Avatar, Button, Card, Progress, Tag, Upload, message } from "antd";
+import { Avatar, Button, Card, Progress, Tag, Upload, message, Spin } from "antd";
 import PersonnelActivitiesTable from "./PersonnelActivitiesTable";
 import getRandomColor from "../../utils/getRandomColor";
 import type { Personnel } from "../../@types/Personnel";
@@ -6,12 +6,14 @@ import imageUtility from "../../utils/imageUtility";
 import { UserOutlined, UploadOutlined } from "@ant-design/icons";
 import nameFormat from "../../utils/nameFormat";
 import YearSelect from "../../componets/YearSelect";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useQuery } from "@tanstack/react-query";
 import personelService from "../../services/personelService";
 import dayjs from "dayjs";
 import { useAuth } from "../../context/UserContext";
 import { useResponsiveLayout } from "../../hooks/useResponsiveLayout";
+import activityTypeService from "../../services/activityTypeService";
+import personnelActivityService from "../../services/personnelActivityService";
 
 type LeaveCreditsFormatType = {
   selectedPersonnel?: Personnel | null;
@@ -24,25 +26,59 @@ export default function LeaveCreditsFormat({
   const [uploading, setUploading] = useState(false);
   const [preview, setPreview] = useState<string | null>(null);
   const [selectedYear, setYear] = useState<number | null>(
-    new Date().getFullYear(),
+    dayjs().year(),
   );
 
   const { isMobile } = useResponsiveLayout(1025);
   const { setUser, user } = useAuth();
 
-  const { data: personnelCredits } = useQuery({
-    queryKey: [
-      "personnelCredits",
-      selectedPersonnel?.personnelId,
-      selectedYear,
-    ],
-    queryFn: async () =>
-      await personelService.getPersonnelCredits(
-        selectedPersonnel?.personnelId!,
-        selectedYear,
-      ),
+  // 1. Fetch All Activity Types
+  const { data: activityTypes, isLoading: isLoadingTypes } = useQuery({
+    queryKey: ["activityTypes"],
+    queryFn: async () => await activityTypeService.getAll(),
     enabled: !!selectedPersonnel?.personnelId,
   });
+
+  // 2. Fetch raw activities history for the target personnel to aggregate credits locally
+  const { data: rawPersonnelActivities, isLoading: isLoadingActivities } = useQuery({
+    queryKey: ["personnelActivitiesRaw", selectedPersonnel?.personnelId],
+    queryFn: async () => {
+      const res = await personnelActivityService.getAll(); 
+      return res || [];
+    },
+    enabled: !!selectedPersonnel?.personnelId,
+  });
+
+  // Global card area loading status flag
+  const isCardSectionLoading = isLoadingTypes || isLoadingActivities;
+
+  // 3. Compute limits, used, and remaining metrics purely on the client side
+  const aggregatedCredits = useMemo(() => {
+    if (!activityTypes) return [];
+
+    const currentYearActivities = (rawPersonnelActivities || []).filter((act: any) => {
+      const matchPersonnel = act.personnelId === selectedPersonnel?.personnelId;
+      const matchYear = act.startDate ? dayjs(act.startDate).year() === selectedYear : false;
+      const isValidStatus = act.status !== "Declined" && act.status !== "Cancelled"; 
+      return matchPersonnel && matchYear && isValidStatus;
+    });
+
+    return activityTypes.map((type: any) => {
+      const usedCredits = currentYearActivities
+        .filter((act: any) => act.activityTypeId === type.activityTypeId)
+        .reduce((sum: number, act: any) => sum + (Number(act.days) || 0), 0);
+
+      const maxCredits = Number(type.maxCredits) || Number(type.limit) || 0;
+      const remainingCredits = Math.max(0, maxCredits - usedCredits);
+
+      return {
+        ...type,
+        maxCredits,
+        usedCredits,
+        remainingCredits,
+      };
+    });
+  }, [activityTypes, rawPersonnelActivities, selectedPersonnel, selectedYear]);
 
   useEffect(() => {
     if (selectedPersonnel) {
@@ -70,7 +106,6 @@ export default function LeaveCreditsFormat({
         }
       });
 
-      // ✅ append file
       if (file) {
         formData.append("profileImage", file);
       }
@@ -174,37 +209,44 @@ export default function LeaveCreditsFormat({
           </div>
         </div>
 
-        {/* Right Side: Credits Grid */}
+        {/* Right Side: Generated Credits Aggregation Grid wrapped in loading element */}
         <div className="col-span-12 lg:col-span-9">
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {personnelCredits?.map((leave: any, index: number) => {
-              const percent =
-                leave.maxCredits > 0
-                  ? (leave.usedCredits / leave.maxCredits) * 100
-                  : 0;
-              const color = getRandomColor(index);
+          <Spin spinning={isCardSectionLoading} tip="Updating allocation aggregates...">
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 min-h-[200px]">
+              {!isCardSectionLoading && aggregatedCredits.length === 0 && (
+                <div className="col-span-full flex items-center justify-center text-gray-400 py-12">
+                  No activity types configured.
+                </div>
+              )}
+              
+              {aggregatedCredits?.map((leave: any, index: number) => {
+                const percent =
+                  leave.maxCredits > 0
+                    ? (leave.usedCredits / leave.maxCredits) * 100
+                    : 0;
+                const color = getRandomColor(index);
 
-              return (
-                <Card
-                  key={index}
-                  hoverable
-                  bodyStyle={{ padding: "16px" }}
-                  className="rounded-xl border-l-4 overflow-hidden shadow-sm"
-                  style={{ borderLeftColor: color }}
-                >
-                  <div className="flex justify-between items-start mb-4">
-                    <h3 className="font-bold text-gray-700 m-0 truncate pr-2">
-                      {leave.activityTypeName}
-                    </h3>
-                    <Tag color={color} className="mr-0 rounded-full font-bold">
-                      {leave.remainingCredits} Left
-                    </Tag>
-                  </div>
+                return (
+                  <Card
+                    key={index}
+                    hoverable
+                    bodyStyle={{ padding: "16px" }}
+                    className="rounded-xl border-l-4 overflow-hidden shadow-sm"
+                    style={{ borderLeftColor: color }}
+                  >
+                    <div className="flex justify-between items-start mb-4">
+                      <h3 className="font-bold text-gray-700 m-0 truncate pr-2">
+                        {leave.activityTypeName}
+                      </h3>
+                      <Tag color={color} className="mr-0 rounded-full font-bold">
+                        {leave.remainingCredits} Left
+                      </Tag>
+                    </div>
 
-                  <div className="flex justify-between text-xs mb-1 text-gray-500">
-                    <span>Used: {leave.usedCredits}</span>
-                    <span>Limit: {leave.maxCredits}</span>
-                  </div>
+                    <div className="flex justify-between text-xs mb-1 text-gray-500">
+                      <span>Used: {leave.usedCredits}</span>
+                      <span>Limit: {leave.maxCredits}</span>
+                    </div>
 
                   <Progress
                     percent={Math.round(percent)}
@@ -214,22 +256,23 @@ export default function LeaveCreditsFormat({
                     strokeWidth={10}
                   />
 
-                  <div className="flex justify-between mt-2">
-                    <span className="text-[10px] text-gray-400 uppercase font-bold">
-                      Usage Status
-                    </span>
-                    <span className="text-xs font-semibold">
-                      {Math.round(percent)}%
-                    </span>
-                  </div>
-                </Card>
-              );
-            })}
-          </div>
+                    <div className="flex justify-between mt-2">
+                      <span className="text-[10px] text-gray-400 uppercase font-bold">
+                        Usage Status
+                      </span>
+                      <span className="text-xs font-semibold">
+                        {Math.round(percent)}%
+                      </span>
+                    </div>
+                  </Card>
+                );
+              })}
+            </div>
+          </Spin>
         </div>
       </div>
 
-      {/* Bottom Section: Table */}
+      {/* Bottom Section: Table Breakdown */}
       <div className="mt-8 pt-6 border-t border-gray-100">
         <div className="flex items-center mb-4">
           <div className="h-6 w-1 bg-blue-500 rounded-full mr-2"></div>

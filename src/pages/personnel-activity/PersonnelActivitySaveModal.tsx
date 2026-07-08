@@ -161,7 +161,7 @@ export default function PersonnelActivitySaveModal({
       (c) => c.activityTypeId === activityTypeId
     );
     let remaining = currentCredit?.remainingCredits ?? 0;
-
+    console.log(remaining)
     // Refund logic for editing
     if (
       selectedActivity &&
@@ -223,13 +223,13 @@ export default function PersonnelActivitySaveModal({
 
       const values = await form.validateFields();
 
+      console.log('days',values)
       const payload: PersonnelActivity = {
         ...values,
         personnelId: user?.personnelId,
         status: "Pending Approval",
         endDate: dayjs(values.endDate)?.format("YYYY-MM-DD"),
         startDate: dayjs(values.startDate)?.format("YYYY-MM-DD"),
-        days: values.days, // Directly sends the input field's payload value
         personnelActivityId: selectedActivity?.personnelActivityId ?? undefined,
       };
 
@@ -303,7 +303,7 @@ export default function PersonnelActivitySaveModal({
       >
         <div style={{ display: showPersonnelSelection ? "block" : "none" }}>
           <PersonnelSelectComponent
-            defaultValue={showPersonnelSelection ? null : user?.personnelId}
+            defaultValue={showPersonnelSelection ? selectedActivity?.personnelId : user?.personnelId}
             name="personnelId"
             label="Personnel"
             onChange={() => handleOverlap()}
@@ -330,7 +330,6 @@ export default function PersonnelActivitySaveModal({
           onChangeStart={() => handleOverlap()}
         />
 
-        {/* Custom Input Field for Days Count Choice */}
         {startDate && endDate && (
           <Form.Item
             name="days"

@@ -37,6 +37,10 @@ function App() {
               headerBg: "#E5E4E2",
               headerColor: "#1f1f1f",
               headerBorderRadius: 8,
+              fontSize: 12,          
+              fontSizeSM: 11,       
+              cellPaddingInline: 8,  
+              cellPaddingBlock: 0,
             },
             Button: {
               colorPrimary: "#044989",

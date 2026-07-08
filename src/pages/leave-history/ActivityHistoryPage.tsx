@@ -79,7 +79,7 @@ export default function ActivityHistoryPage() {
   const renderDutyStatusBadge = (dutyStatus?: string | null) => {
     const normalizedStatus = dutyStatus?.trim();
 
-    if (normalizedStatus === "Active") {
+    if (normalizedStatus === "On Duty") {
       return (
         <Tag
           color="success"
@@ -353,7 +353,7 @@ export default function ActivityHistoryPage() {
             pagination={false}
             onRow={(record) => {
               const dutyStatus = record.dutyStatus?.trim().toLowerCase();
-              const isOnDuty = dutyStatus === "active";
+              const isOnDuty = dutyStatus === "on duty";
 
               // Find index corresponding to the specific custom status matching the legend sequence
               const statusColorIndex = activityData.findIndex(

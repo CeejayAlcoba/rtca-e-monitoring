@@ -83,12 +83,13 @@ export default function ManualActivitySaveModal({
     try {
       setIsSubmitting(true);
       const values = await form.validateFields();
+      console.log('serverDays',serverDays)
       const payload: PersonnelActivity = {
         ...selectedActivity,
         ...values,
         endDate: dayjs(values.endDate)?.format("YYYY-MM-DD"),
         startDate: dayjs(values.startDate)?.format("YYYY-MM-DD"),
-        days: serverDays, // Send the server-calculated value
+        // days: serverDays, 
       };
 
       if (selectedActivity?.personnelActivityId) {
