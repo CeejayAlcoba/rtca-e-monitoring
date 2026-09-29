@@ -73,7 +73,7 @@ export default function PersonnelActivitySaveModal({
   const endDate = Form.useWatch("endDate", form);
   const activityTypeId = Form.useWatch("activityTypeId", form);
   const personnelId = Form.useWatch("personnelId", form);
-  
+
   // Watch the form instance's manual day changes to dynamically adapt the credit deduction calculations
   const formDaysInput = Form.useWatch("days", form);
 
@@ -114,7 +114,7 @@ export default function PersonnelActivitySaveModal({
             selectedTypeObj?.activityTypeId == 6,
           );
           setServerDays(days);
-          
+
           // Fallback: If creating a new record, automatically load the calculated value as the input value
           if (!selectedActivity) {
             form.setFieldsValue({ days: days });
@@ -183,7 +183,7 @@ export default function PersonnelActivitySaveModal({
   const handleOverlap = async () => {
     const values = form.getFieldsValue();
     let selectedPersonnelId = user?.personnelId ?? values.personnelId;
-    
+
     if (selectedPersonnelId && values.startDate && values.endDate) {
       try {
         const payload: PersonnelActivity = {
@@ -223,7 +223,7 @@ export default function PersonnelActivitySaveModal({
 
       const values = await form.validateFields();
 
-      console.log('days',values)
+      console.log('days', values)
       const payload: PersonnelActivity = {
         ...values,
         personnelId: user?.personnelId,
@@ -332,12 +332,13 @@ export default function PersonnelActivitySaveModal({
 
         {startDate && endDate && (
           <Form.Item
+
             name="days"
             label="Days Count Allocation"
             extra={serverDays > 0 ? `System Recommendation: ${serverDays} Day(s) based on system calendar logic.` : ""}
             rules={[{ required: true, message: "Please input or accept day allocations" }]}
           >
-            <InputNumber min={0} style={{ width: "100%" }} placeholder="Input days amount" />
+            <InputNumber readOnly min={0} style={{ width: "100%" }} placeholder="Input days amount" />
           </Form.Item>
         )}
 
@@ -399,12 +400,20 @@ export default function PersonnelActivitySaveModal({
           </div>
         )}
 
-        <Form.Item name="title" label="Title">
-          <Input placeholder="Enter title (e.g., Summer Vacation)" />
-        </Form.Item>
-
-        <Form.Item name="reason" label="Reason for Action">
-          <TextArea rows={4} placeholder="State your reason here..." />
+        <Form.Item
+          name="reason"
+          label="Reason for Action"
+          rules={[
+            {
+              required: true,
+              message: "Please provide a reason for this action.",
+            },
+          ]}
+        >
+          <TextArea
+            rows={4}
+            placeholder="State your reason here..."
+          />
         </Form.Item>
       </Form>
     </Modal>

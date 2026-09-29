@@ -18,7 +18,8 @@ const queryClient = new QueryClient({
 });
 
 function App() {
-  const [user, setUser] = useState<Usertbl | null>(null);
+  const [user, setUser] = useState<Usertbl | null>(localStorage.getItem("user")? JSON.parse(localStorage.getItem("user")??""): null);
+  
   const { isMobile } = useResponsiveLayout();
   return (
     <QueryClientProvider client={queryClient}>

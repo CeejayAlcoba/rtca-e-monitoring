@@ -27,6 +27,7 @@ export default function LoginTab() {
 
       setUser(user);
       localStorage.setItem("jwt_token", token ?? "");
+      localStorage.setItem("user", JSON.stringify(user) ?? "");
       navigate(user?.role?.indexPath ?? "/");
       form.resetFields();
     } catch (error: any) {

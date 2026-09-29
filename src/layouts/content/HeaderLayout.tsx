@@ -20,7 +20,7 @@ export default function HeaderLayout() {
       key: "logout",
       label: "Log Out",
       icon: <LogoutOutlined />,
-      danger: true,
+      danger:   true,
       onClick: () => {
         setUser(null);
         localStorage.clear();
